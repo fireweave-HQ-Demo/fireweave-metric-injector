@@ -1,0 +1,29 @@
+{
+  "name": "@fireweave/worker",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/worker.ts"
+  },
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fireweave/core": "workspace:*",
+    "@fireweave/db": "workspace:*",
+    "@fireweave/queue": "workspace:*",
+    "bullmq": "^5.61.2",
+    "dotenv": "^17.2.3",
+    "ioredis": "^5.8.2",
+    "pino": "^9.14.0",
+    "@prometheus-io/client": "^0.16.1",
+    "tsx": "^4.20.6",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "typescript": "^5.9.3"
+  }
+}

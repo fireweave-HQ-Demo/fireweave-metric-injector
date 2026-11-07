@@ -1,0 +1,4 @@
+data/password-denylist.txt
+pnpm-lock.yaml
+packages/db/prisma/migrations
+IMPLEMENTATION_PLAN.md

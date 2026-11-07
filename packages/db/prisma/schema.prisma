@@ -1,0 +1,269 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  admin
+  user
+
+  @@map("role")
+}
+
+enum VendorType {
+  openobserve
+  datadog
+  sentry
+
+  @@map("vendor_type")
+}
+
+enum CredentialKind {
+  api_key
+  token
+  email
+  dsn_key
+
+  @@map("credential_kind")
+}
+
+enum JobStatus {
+  scheduled
+  active
+  paused
+  completed
+  failed
+
+  @@map("job_status")
+}
+
+enum FanoutMode {
+  replicate
+  split
+
+  @@map("fanout_mode")
+}
+
+enum MetricType {
+  counter
+  gauge
+  histogram
+
+  @@map("metric_type")
+}
+
+enum MetricCategory {
+  success
+  error
+  custom
+  dependent
+
+  @@map("metric_category")
+}
+
+enum BatchStatus {
+  in_flight
+  completed
+  abandoned
+
+  @@map("batch_status")
+}
+
+enum DeliveryStatus {
+  pending
+  delivered
+  dead
+
+  @@map("delivery_status")
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  role         Role     @default(user)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  refreshTokens  RefreshToken[]
+  vendorAccounts VendorAccount[]
+  jobs           IngestionJob[]
+  auditLogs      AuditLog[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id            String    @id @default(uuid()) @db.Uuid
+  userId        String    @map("user_id") @db.Uuid
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chainId       String    @map("chain_id") @db.Uuid
+  parentId      String?   @map("parent_id") @db.Uuid
+  parent        RefreshToken?  @relation("RefreshParent", fields: [parentId], references: [id], onDelete: SetNull)
+  children      RefreshToken[] @relation("RefreshParent")
+  replacedById  String?   @unique @map("replaced_by_id") @db.Uuid
+  replacedBy    RefreshToken?  @relation("RefreshReplacement", fields: [replacedById], references: [id], onDelete: SetNull)
+  replaces      RefreshToken?  @relation("RefreshReplacement")
+  tokenHash     String    @unique @map("token_hash")
+  userAgentHash String?   @map("user_agent_hash")
+  expiresAt     DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt     DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([userId])
+  @@index([chainId])
+  @@map("refresh_tokens")
+}
+
+model VendorAccount {
+  id                 String         @id @default(uuid()) @db.Uuid
+  userId             String         @map("user_id") @db.Uuid
+  user               User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vendorType         VendorType     @map("vendor_type")
+  label              String
+  credentialsCipher  Bytes          @map("credentials_cipher")
+  credentialHint     String         @map("credential_hint")
+  credentialKind     CredentialKind @map("credential_kind")
+  validatedAt        DateTime       @map("validated_at") @db.Timestamptz(3)
+  isActive           Boolean        @default(true) @map("is_active")
+  deletedAt          DateTime?      @map("deleted_at") @db.Timestamptz(3)
+  createdAt          DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  jobs       JobVendorAccount[]
+  deliveries IngestionDelivery[]
+  failures   IngestionFailure[]
+
+  @@index([userId])
+  @@map("vendor_accounts")
+}
+
+model IngestionJob {
+  id                   String     @id @default(uuid()) @db.Uuid
+  userId               String     @map("user_id") @db.Uuid
+  user                 User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name                 String
+  status               JobStatus
+  fanoutMode           FanoutMode @default(replicate) @map("fanout_mode")
+  timezone             String
+  virtualUserCount     Int        @map("virtual_user_count")
+  peakRatePerSecond    Float      @map("peak_rate_per_second")
+  successProbability   Float      @map("success_probability")
+  errorProbability     Float      @map("error_probability")
+  tickIntervalMs       Int        @default(1000) @map("tick_interval_ms")
+  startTime            DateTime   @map("start_time") @db.Timestamptz(3)
+  endTime              DateTime?  @map("end_time") @db.Timestamptz(3)
+  lastSimulatedAt      DateTime?  @map("last_simulated_at") @db.Timestamptz(3)
+  consecutiveLagTicks  Int        @default(0) @map("consecutive_lag_ticks")
+  deletedAt            DateTime?  @map("deleted_at") @db.Timestamptz(3)
+  createdAt            DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  accounts    JobVendorAccount[]
+  definitions MetricDefinition[]
+  batches     IngestionBatch[]
+  failures    IngestionFailure[]
+
+  @@index([userId, createdAt])
+  @@map("ingestion_jobs")
+}
+
+model JobVendorAccount {
+  jobId           String        @map("job_id") @db.Uuid
+  vendorAccountId String        @map("vendor_account_id") @db.Uuid
+  job             IngestionJob  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  vendorAccount   VendorAccount @relation(fields: [vendorAccountId], references: [id], onDelete: Cascade)
+
+  @@id([jobId, vendorAccountId])
+  @@map("job_vendor_accounts")
+}
+
+model MetricDefinition {
+  id                  String         @id @default(uuid()) @db.Uuid
+  jobId               String         @map("job_id") @db.Uuid
+  job                 IngestionJob   @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  name                String
+  type                MetricType
+  category            MetricCategory
+  tags                Json           @default("{}")
+  dependsOn           String[]       @default([]) @map("depends_on")
+  formula             String?
+  evalOrder           Int            @map("eval_order")
+  successProbability  Float?         @map("success_probability")
+  errorProbability    Float?         @map("error_probability")
+  createdAt           DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([jobId, evalOrder])
+  @@map("metric_definitions")
+}
+
+model IngestionBatch {
+  id          String      @id @default(uuid()) @db.Uuid
+  jobId       String      @map("job_id") @db.Uuid
+  job         IngestionJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  windowStart DateTime    @map("window_start") @db.Timestamptz(3)
+  windowEnd   DateTime    @map("window_end") @db.Timestamptz(3)
+  status      BatchStatus
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  completedAt DateTime?   @map("completed_at") @db.Timestamptz(3)
+
+  deliveries IngestionDelivery[]
+
+  @@index([jobId, createdAt])
+  @@index([status, createdAt])
+  @@map("ingestion_batches")
+}
+
+model IngestionDelivery {
+  id              String         @id @default(uuid()) @db.Uuid
+  batchId         String         @map("batch_id") @db.Uuid
+  batch           IngestionBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  vendorAccountId String         @map("vendor_account_id") @db.Uuid
+  vendorAccount   VendorAccount  @relation(fields: [vendorAccountId], references: [id], onDelete: Cascade)
+  status          DeliveryStatus
+  attemptCount    Int            @default(0) @map("attempt_count")
+  error           String?
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  failures IngestionFailure[]
+
+  @@index([batchId])
+  @@index([vendorAccountId])
+  @@map("ingestion_deliveries")
+}
+
+model IngestionFailure {
+  id              String             @id @default(uuid()) @db.Uuid
+  jobId           String?            @map("job_id") @db.Uuid
+  job             IngestionJob?      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  vendorAccountId String?            @map("vendor_account_id") @db.Uuid
+  vendorAccount   VendorAccount?     @relation(fields: [vendorAccountId], references: [id], onDelete: SetNull)
+  deliveryId      String?            @map("delivery_id") @db.Uuid
+  delivery        IngestionDelivery? @relation(fields: [deliveryId], references: [id], onDelete: SetNull)
+  reason          String
+  payload         Json
+  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([jobId, createdAt])
+  @@index([createdAt])
+  @@map("ingestion_failures")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  metadata   Json     @default("{}")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([userId, createdAt])
+  @@map("audit_logs")
+}
