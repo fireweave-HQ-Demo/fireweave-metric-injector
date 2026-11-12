@@ -258,6 +258,30 @@ describe('tick simulation', () => {
     });
     expect(result.arrivalCount).toBeGreaterThan(0);
     expect(result.points.find((point) => point.name === 'error_rate')).toBeUndefined();
+    const quiet = result.points.filter((point) => point.name === 'errors');
+    expect(quiet).toEqual([
+      expect.objectContaining({
+        value: 0,
+        timestamp: result.window.windowEnd,
+      }),
+    ]);
+  });
+
+  it('emits a zero error sample when a window has no error arrivals', () => {
+    const result = simulateTick({
+      job: job({
+        successProbability: 1,
+        errorProbability: 0,
+        peakRatePerSecond: 40,
+        tickIntervalMs: 2000,
+      }),
+      definitions: [successes, errors],
+      now: fridayAfternoon,
+    });
+    expect(sum(result.points, 'successes')).toBe(result.arrivalCount);
+    expect(result.points.filter((point) => point.name === 'errors')).toEqual([
+      expect.objectContaining({ value: 0, timestamp: result.window.windowEnd }),
+    ]);
   });
 
   it('buckets a tick above 2000 points without changing the counter total', () => {

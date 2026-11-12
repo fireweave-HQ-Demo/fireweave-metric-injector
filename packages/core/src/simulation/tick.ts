@@ -160,6 +160,18 @@ function generatePoints(input: {
       }
     }
   }
+  for (const definition of input.definitions) {
+    if (definition.category !== 'error' || (totals.get(definition.name) ?? 0) > 0) {
+      continue;
+    }
+    points.push({
+      name: definition.name,
+      type: definition.type,
+      value: 0,
+      timestamp: new Date(input.window.windowEnd.getTime()),
+      tags: { ...definition.tags },
+    });
+  }
   const values: Record<string, number> = {};
   for (const [name, total] of totals) {
     values[name] = total;

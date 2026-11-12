@@ -51,7 +51,7 @@ function openObserveAuthorization(
 
 function toOpenObserveRecord(metric: MetricPoint): Record<string, string | number> {
   const record: Record<string, string | number> = {
-    __name__: metric.name,
+    __name__: openObserveMetricName(metric.name),
     __type__: metric.type,
   };
   for (const [key, value] of sortedTags(metric.tags)) {
@@ -69,6 +69,10 @@ function toOpenObserveRecord(metric: MetricPoint): Record<string, string | numbe
   record._timestamp = metric.timestamp.getTime();
   record.value = metric.value;
   return record;
+}
+
+function openObserveMetricName(name: string): string {
+  return name.replace(/[^A-Za-z0-9_:]+/g, '_');
 }
 
 function sortedTags(tags: Record<string, string>): Array<[string, string]> {

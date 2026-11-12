@@ -56,7 +56,7 @@ describe('vendor adapters', () => {
     expect(calls[1]?.url).toBe('https://oo.example/api/default/ingest/metrics/_json');
     expect(JSON.parse(calls[1]?.body ?? '[]')).toEqual([
       {
-        __name__: 'checkout.latency',
+        __name__: 'checkout_latency',
         __type__: 'histogram',
         service: 'checkout',
         _timestamp: at.getTime(),
